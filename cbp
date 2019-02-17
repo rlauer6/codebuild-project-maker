@@ -1,6 +1,58 @@
 #!/bin/bash
 # -*- mode: sh; -*-
 
+function help() {
+    test -n "$1" && echo "$1"
+    
+    cat <<"EOF"
+usage: cbp options command
+
+Script to create a CodeBuild project. See Recipe below.
+
+Options
+-------
+-c image         - Docker image (default: amazonlinux)
+-d description   - Project description
+-D dryrun        - just echo commands, do not execut
+-p name          - Project name
+-P               - Privileged mode (default: false)
+-b bucket        - S3 bucket name
+-k               - Bucket prefix (default: project name)
+-B               - buildspec name (default: buildspec.yml)
+-t compute type  - compute type small,medium,large (default: small) 
+
+Commands
+--------
+create-project
+create-role
+create-policy
+start-build
+
+Recipe
+------
+1. cpb -p my-project create-role
+2. cpb -p my-project -b bucket-name create-policy
+3. cpb -p my-project -b bucket-name create-project
+4. cpb -p my-project start-build name val name val
+
+Notes
+-----
+- follow the recipe, role & policy need to be created first!
+
+- The purpose of the script is to provide a script that
+  covers 80% of your use cases for a CodeBuild project that ONLY
+  contains a buildspec.
+
+For more information visit:
+
+ https://github.com/rlauer6/codebuild-project-maker
+
+Copyright (c) 2019 Robert C. Lauer, All rights reserved
+This is free software and may be used without charge for any purpose.
+EOF
+    exit 1;
+}
+
 function check_bucket() {
     if test -z "$BUCKET_NAME"; then
         help "ERROR: no bucket name"
@@ -19,6 +71,15 @@ function start_build() {
 function create_project() {
     check_bucket;
     
+    COMPUTE_TYPE=${COMPUTE_TYPE:-small}
+    COMPUTE_TYPE=$(echo $COMPUTE_TYPE | tr '[:lower:]' '[:upper:]')
+    
+    if [[ "$COMPUTE_TYPE" != "SMALL" && "$COMPUTE_TYPE" != "MEDIUM" && "$COMPUTE_TYPE" != "LARGE" ]]; then
+        help "ERROR: invalid compute type: $COMPUTE_TYPE"
+    fi
+
+    COMPUTE_TYPE="BUILD_GENERAL1_$COMPUTE_TYPE"
+    
     SERVICE_ROLE_ARN="arn:aws:iam::$ACCOUNT:role/codebuild-$PROJECT_NAME"
     PRIVILEGED_MODE=${PRIVILEGED_MODE:-privilegedMode=false}
     BUCKET_PREFIX=${BUCKET_PREFIX:-$PROJECT_NAME}
@@ -29,7 +90,7 @@ function create_project() {
          --source 'type="NO_SOURCE",buildspec="'"$BUILDSPEC"'"' \
          --artifacts 'packaging="ZIP",type="S3",path="'$BUCKET_PREFIX'",overrideArtifactName=true,location="'$BUCKET_NAME'"' \
          --description $DESCRIPTION \
-         --environment 'type="LINUX_CONTAINER",image="'$DOCKER_CONTAINER'",computeType="BUILD_GENERAL1_SMALL",'$PRIVILEGED_MODE \
+         --environment 'type="LINUX_CONTAINER",image="'$DOCKER_CONTAINER'",computeType="'$COMPUTE_TYPE'",'$PRIVILEGED_MODE \
          --service-role $SERVICE_ROLE_ARN
 }
 
@@ -106,55 +167,6 @@ EOF
     $AWS iam put-role-policy --role-name "codebuild-$PROJECT_NAME" --policy-name "CodeBuildPolicy-$PROJECT_NAME" --policy-document "$POLICY"
 }
 
-function help() {
-    test -n "$1" && echo "$1"
-    
-    cat <<"EOF"
-usage: cbp options command
-
-Options
--------
--c image       - Docker image (default: amazonlinux)
--d description - Project description
--D dryrun      - just echo commands, do not execut
--p name        - Project name
--P             - Privileged mode (default: false)
--b bucket      - S3 bucket name
--k             - Bucket prefix (default: project name)
--B             - buildspec name (default: buildspec.yml)
-
-Commands
---------
-create-project
-create-role
-create-policy
-start-build
-
-Recipe
-------
-1. cpb -p my-project create-role
-2. cpb -p my-project -b bucket-name create-policy
-3. cpb -p my-project -b bucket-name create-project
-4. cpb -p my-project start-build name val name val
-
-Notes
------
-- follow the recipe, role & policy need to be created first!
-
-- The purpose of the script is to provide a script that
-  covers 80% of your use cases for a CodeBuild project that ONLY
-  contains a buildspec.
-
-For more information visit:
-
- https://github.com/rlauer6/codebuild-project-maker
-
-Copyright (c) 2019 Robert C. Lauer, All rights reserved
-This is free software and may be used without charge for any purpose.
-EOF
-    exit 1;
-}
-
 
 # commands
 # --------
@@ -163,7 +175,7 @@ EOF
 #   create-policy
 #   start-build
 
-OPTS=$(getopt -o hk:c:p:b:B:d:PD -- "$@")
+OPTS=$(getopt -o hk:c:p:b:B:d:t:PD -- "$@")
 
 if [ $? -ne 0 ]; then
     help "ERROR: could not parse options"
@@ -179,6 +191,15 @@ fi
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        -t)
+            shift;
+            COMPUTE_TYPE="$1"
+            shift;
+            ;;
+        -h)
+            help;
+            ;;
+        
         # dryrun
         -D)
             AWS="echo aws"
@@ -209,7 +230,7 @@ while [ $# -gt 0 ]; do
 
         -B)
             shift;
-            BUILDSPEC="$1"
+            BUILDSPEC_FILE="$1"
             shift;
             ;;
         
@@ -240,7 +261,7 @@ fi
 BUILDSPEC_FILE=${BUILDSPEC_FILE:-buildspec.yml}
 
 if ! test -e "$BUILDSPEC_FILE"; then
-    help "ERROR: no buildsspec file: ($BUILDSPEC_FILE) found"
+    help "ERROR: no buildspec file: ($BUILDSPEC_FILE) found"
 fi
 
 BUILDSPEC=$(cat $BUILDSPEC_FILE)
