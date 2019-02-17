@@ -1,0 +1,283 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+
+function check_bucket() {
+    if test -z "$BUCKET_NAME"; then
+        help "ERROR: no bucket name"
+    fi
+}
+
+function start_build() {
+    if test -n "$ENV_VARS"; then
+        ENV_VARS="--environment-variables-override "$ENV_VARS
+    fi
+    
+    $AWS codebuild start-build \
+        --project-name $PROJECT_NAME $ENV_VARS
+}
+
+function create_project() {
+    check_bucket;
+    
+    SERVICE_ROLE_ARN="arn:aws:iam::$ACCOUNT:role/codebuild-$PROJECT_NAME"
+    PRIVILEGED_MODE=${PRIVILEGED_MODE:-privilegedMode=false}
+    BUCKET_PREFIX=${BUCKET_PREFIX:-$PROJECT_NAME}
+    DOCKER_CONTAINER=${DOCKER_CONTAINER:-amazonlinux}
+    
+    $AWS codebuild create-project \
+         --name $PROJECT_NAME \
+         --source 'type="NO_SOURCE",buildspec="'"$BUILDSPEC"'"' \
+         --artifacts 'packaging="ZIP",type="S3",path="'$BUCKET_PREFIX'",overrideArtifactName=true,location="'$BUCKET_NAME'"' \
+         --description $DESCRIPTION \
+         --environment 'type="LINUX_CONTAINER",image="'$DOCKER_CONTAINER'",computeType="BUILD_GENERAL1_SMALL",'$PRIVILEGED_MODE \
+         --service-role $SERVICE_ROLE_ARN
+}
+
+function create_role() {
+    SERVICE_ROLE=$(cat <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "codebuild.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+            )
+    $AWS iam create-role \
+         --role-name "codebuild-$PROJECT_NAME" \
+         --assume-role-policy-document "$SERVICE_ROLE"
+}
+
+function create_policy() {
+    check_bucket;
+    
+    POLICY=$(cat <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:logs:$REGION:$ACCOUNT:log-group:/aws/codebuild/$PROJECT_NAME",
+                "arn:aws:logs:$REGION:$ACCOUNT:log-group:/aws/codebuild/$PROJECT_NAME:*"
+            ],
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:s3:::codepipeline-$REGION-*"
+            ],
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:GetObjectVersion",
+                "s3:GetBucketAcl",
+                "s3:GetBucketLocation"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:s3:::$BUCKET_NAME",
+                "arn:aws:s3:::$BUCKET_NAME/*"
+            ],
+            "Action": [
+                "s3:PutObject",
+                "s3:GetBucketAcl",
+                "s3:GetBucketLocation"
+            ]
+        }
+    ]
+}
+EOF
+          )
+
+    $AWS iam put-role-policy --role-name "codebuild-$PROJECT_NAME" --policy-name "CodeBuildPolicy-$PROJECT_NAME" --policy-document "$POLICY"
+}
+
+function help() {
+    test -n "$1" && echo "$1"
+    
+    cat <<"EOF"
+usage: cbp options command
+
+Options
+-------
+-c image       - Docker image (default: amazonlinux)
+-d description - Project description
+-D dryrun      - just echo commands, do not execut
+-p name        - Project name
+-P             - Privileged mode (default: false)
+-b bucket      - S3 bucket name
+-k             - Bucket prefix (default: project name)
+-B             - buildspec name (default: buildspec.yml)
+
+Commands
+--------
+create-project
+create-role
+create-policy
+start-build
+
+Recipe
+------
+1. cpb -p my-project create-role
+2. cpb -p my-project -b bucket-name create-policy
+3. cpb -p my-project -b bucket-name create-project
+4. cpb -p my-project start-build name val name val
+
+Notes
+-----
+- follow the recipe, role & policy need to be created first!
+
+- The purpose of the script is to provide a script that
+  covers 80% of your use cases for a CodeBuild project that ONLY
+  contains a buildspec.
+
+For more information visit:
+
+ https://github.com/rlauer6/codebuild-project-maker
+
+Copyright (c) 2019 Robert C. Lauer, All rights reserved
+This is free software and may be used without charge for any purpose.
+EOF
+    exit 1;
+}
+
+
+# commands
+# --------
+#   create-project
+#   create-role
+#   create-policy
+#   start-build
+
+OPTS=$(getopt -o hk:c:p:b:B:d:PD -- "$@")
+
+if [ $? -ne 0 ]; then
+    help "ERROR: could not parse options"
+fi
+
+eval set -- "$OPTS"
+
+if test -n "$DRYRUN"; then
+    AWS="echo aws"
+else
+    AWS="aws"
+fi
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        # dryrun
+        -D)
+            AWS="echo aws"
+            shift;
+            ;;
+        -c)
+            shift;
+            DOCKER_CONTAINER="$1"
+            shift;
+            ;;
+        
+        -P)
+            shift;
+            PRIVILEGED_MODE="privilegedMode=true"
+            ;;
+        
+        -b)
+            shift;
+            BUCKET_NAME="$1"
+            shift;
+            ;;
+
+        -k)
+            shift;
+            BUCKET_PRFIX="$1"
+            shift;
+            ;;
+
+        -B)
+            shift;
+            BUILDSPEC="$1"
+            shift;
+            ;;
+        
+        -p)
+            shift;
+            PROJECT_NAME="$1"
+            shift;
+            ;;
+        
+        -d)
+            shift;
+            DESCRIPTION="$1"
+            shift;
+            ;;
+        --)
+            shift;
+            break;
+            ;;
+    esac
+done
+
+command="$1";
+
+if test -z "$command"; then
+    help "ERROR: nothing to do!"
+fi
+
+BUILDSPEC_FILE=${BUILDSPEC_FILE:-buildspec.yml}
+
+if ! test -e "$BUILDSPEC_FILE"; then
+    help "ERROR: no buildsspec file: ($BUILDSPEC_FILE) found"
+fi
+
+BUILDSPEC=$(cat $BUILDSPEC_FILE)
+DESCRIPTION=${DESCRIPTION:-$PROJECT_NAME}
+
+if test -z "$PROJECT_NAME"; then
+    help "ERROR: no project name"
+fi
+
+REGION=$(aws configure get region)
+ACCOUNT=$(aws sts get-caller-identity | jq -r .Account)
+
+case "$command" in
+    create-role)
+        create_role;
+        ;;
+    
+    create-policy)
+        create_policy;
+        ;;
+
+    create-project)
+        create_project;
+        ;;
+    
+    start-build)
+        ENV_VARS=""
+        shift;
+        while [ $# -ne 0 ]; do
+            test -n "$ENV_VARS" && ENV_VARS="$ENV_VARS,"
+            ENV_VARS="${ENV_VARS}name=$1,value=$2"
+            shift;
+            shift;
+        done
+        start_build;
+        ;;
+    *)
+        echo "ERROR: unknown command"
+        ;;
+esac
