@@ -1,0 +1,18 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - yum install -y gcc patch wget aws-cli tar gzip make zip tree
+  pre_build:
+    commands:
+      - wget http://www.cpan.org/src/5.0/perl-$PERL_VERSION.tar.gz -O perl-$PERL_VERSION.tar.gz
+  build:
+    commands:
+      - tar xfvz perl-$PERL_VERSION.tar.gz
+      - cd perl-$PERL_VERSION && ./Configure -des -Dprefix=/opt/perl-$PERL_VERSION -Dman1dir=none -Dman3dir=none
+      - make && make install DESTDIR=/tmp
+artifacts:
+  base-directory: '/tmp'
+  files:
+    - '**/*'
+  name: perl-$PERL_VERSION.zip
