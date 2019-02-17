@@ -11,15 +11,15 @@ Script to create a CodeBuild project. See Recipe below.
 
 Options
 -------
--c image         - Docker image (default: amazonlinux)
--d description   - Project description
--D dryrun        - just echo commands, do not execut
--p name          - Project name
--P               - Privileged mode (default: false)
--b bucket        - S3 bucket name
--k               - Bucket prefix (default: project name)
--B               - buildspec name (default: buildspec.yml)
--t compute type  - compute type small,medium,large (default: small) 
+-B               -> buildspec name (default: buildspec.yml)
+-D dryrun        -> just echo commands, do not execut
+-P               -> Privileged mode (default: false)
+-b bucket        -> S3 bucket name
+-c image         -> Docker image (default: amazonlinux)
+-d description   -> Project description
+-k               -> Bucket prefix (default: project name)
+-p name          -> Project name
+-t compute type  -> compute type small,medium,large (default: small) 
 
 Commands
 --------
@@ -37,9 +37,9 @@ Recipe
 
 Notes
 -----
-- follow the recipe, role & policy need to be created first!
+* follow the recipe, role & policy need to be created first!
 
-- The purpose of the script is to provide a script that
+* The purpose of the script is to provide a script that
   covers 80% of your use cases for a CodeBuild project that ONLY
   contains a buildspec.
 
@@ -164,7 +164,10 @@ function create_policy() {
 EOF
           )
 
-    $AWS iam put-role-policy --role-name "codebuild-$PROJECT_NAME" --policy-name "CodeBuildPolicy-$PROJECT_NAME" --policy-document "$POLICY"
+    $AWS iam put-role-policy \
+         --role-name "codebuild-$PROJECT_NAME" \
+         --policy-name "CodeBuildPolicy-$PROJECT_NAME" \
+         --policy-document "$POLICY"
 }
 
 

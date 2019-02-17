@@ -34,19 +34,38 @@ artifacts:
 ...and seeing it, much to my surprise, actually work, it made sense to
 codify the research I did in a bash script.
 
-# Use Cases
+# Use Case
 
 The purpose of the project is to provide a way to create CodeBuild
 projects that build artifacts from a `buildspec.yml` file and make
-them available in an S3 bucket. Therefore the script does not provide
-options for everything you can do with CodeBuild, but just enough to
-initiate a generic build that creates some artifacts.
+them available in an S3 bucket. There are times when you have no
+source code or the source code is not in a repository that is directly
+supported by CodeBuild. CodeBuild supports the
+following source repositories:
+
+* CodeCommit
+* GitHub
+* GitHub Enterprise
+* S3
+* Bitbucket
+
+Fortunately, there is also a "NO_SOURCE" option that allows you to
+simply apply a build a recipe that creates artifacts.  In fact,
+CodeBuild could be used for as a way to execute some bits of code
+triggered by CloudWatch events including scheduled events (think batch
+jobs). This script however focuses on simply running a recipe - how
+you trigger it is up to you.
+
+The script does not try to provide options for everything you can do
+with CodeBuild, but just enough to initiate a generic build that
+creates some artifacts.
 
 # Additonal Notes
 
-By default, the container used is the __amazonlinux__ Docker image
-that mimics (for the most part) the image used by Lambdas.  You can
-override that by providing an option (-c) when you create the project.
+By default, the container used to execute the recipe is the
+__amazonlinux__ Docker image that mimics (for the most part) the image
+used by Lambdas.  You can override that by providing an option (-c)
+when you create the project.
 
 By default, the project will configure the CodeBuild project to write
 your artifacts to the S3 bucket you specify with the bucket prefix as
@@ -84,6 +103,9 @@ the -b and -k options.  See below for a description of the options.
 
   By default the buildspec file name is `buildspec.yml` however you
   can override that with this option.
+* `-t`
+
+  Compute type (small, medium, large). Default is small.
 
 # Creating a CodeBuild Project
 
