@@ -103,8 +103,9 @@ the -b and -k options.  See below for a description of the options.
 
   By default the buildspec file name is `buildspec.yml` however you
   can override that with this option.
-^ `-t`
-Compute type (small, medium, large). Default is small.
+* `-t`
+
+  Compute type (small, medium, large). Default is small.
 
 # Creating a CodeBuild Project
 
