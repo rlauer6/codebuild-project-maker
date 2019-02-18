@@ -15,7 +15,7 @@ version: 0.2
 phases:
   install:
     commands:
-      - yum install -y gcc patch wget aws-cli tar gzip make zip tree
+      - yum install -y gcc patch wget aws-cli tar gzip make zip
   pre_build:
     commands:
       - wget http://www.cpan.org/src/5.0/perl-$PERL_VERSION.tar.gz -O perl-$PERL_VERSION.tar.gz
@@ -51,7 +51,7 @@ following source repositories:
 
 Fortunately, there is also a "NO_SOURCE" option that allows you to
 simply apply a build a recipe that creates artifacts.  In fact,
-CodeBuild could be used for as a way to execute some bits of code
+CodeBuild could be used as a way to execute some bits of code
 triggered by CloudWatch events including scheduled events (think batch
 jobs). This script however focuses on simply running a recipe - how
 you trigger it is up to you.
@@ -85,7 +85,7 @@ the -b and -k options.  See below for a description of the options.
   provided, then the description will become the project name.
 * `-D`
 
-  Use this option to echo the commands that will be executed.
+  Use this option (dryrun) to just echo the commands that will be executed.
 * `-p`
 
   Project name.
@@ -97,20 +97,19 @@ the -b and -k options.  See below for a description of the options.
   Name of the S3 bucket that will contain the artifacts of the build.
 * `-k`
 
-  Prefix name for storing your artifacts.  If no provided, the project
+  Prefix name for storing your artifacts.  If not provided, the project
   name will be used as the bucket prefix.
 * `-B`
 
   By default the buildspec file name is `buildspec.yml` however you
   can override that with this option.
-* `-t`
-
-  Compute type (small, medium, large). Default is small.
+^ `-t`
+Compute type (small, medium, large). Default is small.
 
 # Creating a CodeBuild Project
 
 In addition to creating a `buildspec.yml` file, to create a CodeBuild
-project you'll need to do the following things:
+project you need to follow these steps:
 
 1. create an IAM service role for CodeBuild to assume
 1. attach a policy that allows the role to write to CloudWatch logs
@@ -123,7 +122,7 @@ ability to make IAM API calls._
 You should be prepared to provide:
 
 * an S3 bucket name that you have provisioned
-* a `buildsepc.yml` file
+* a `buildspec.yml` file
 * a project name
 
 Assuming you have your `buildspec.yml` file ready to roll...to create
@@ -136,7 +135,7 @@ the project, follow this recipe.
 To start a build:
 
 ```
-cbp -p project-name start-build name val name val
+cbp -p project-name start-build name val ...
 ```
 
 Where `name` is the name of an environment variable and `val` is the
@@ -145,7 +144,7 @@ as necessary.
 
 # Notes
 
-* Originally, the script created the role, policy and project all at the
+* Originally, the script created the role, policy and CodeBuild project all at the
 same time, however IAM policies sometimes take a bit of time to
 propagate and the project creation step would fail.
 
