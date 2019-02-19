@@ -149,6 +149,10 @@ as necessary.
 same time, however IAM policies sometimes take a bit of time to
 propagate and the project creation step would fail.
 
+See this link.
+
+https://forums.aws.amazon.com/thread.jspa?threadID=255063
+
 # Copyright
 
 Copyright (c) 2019 Robert C. Lauer.  All rights reserved.
